@@ -1,7 +1,7 @@
 import { Renderer } from "../types/rendering.ts";
 import { WebGPUUtils } from "./utils.ts";
-import vertexShaderSource from "./shaders/triangle/vertex.wgsl?raw";
-import fragmentShaderSource from "./shaders/triangle/fragment.wgsl?raw";
+import vertexShaderSource from "./triangle/shaders/vertex.wgsl?raw";
+import fragmentShaderSource from "./triangle/shaders/fragment.wgsl?raw";
 
 export class WebGPURenderer implements Renderer {
     private context!: GPUCanvasContext;

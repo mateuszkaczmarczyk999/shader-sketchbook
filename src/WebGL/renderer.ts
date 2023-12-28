@@ -1,7 +1,6 @@
 import { Renderer } from "../types/rendering.ts";
 import { WebGLUtils } from "./utils.ts";
 import {
-    BufferAttribute, BufferGeometry,
     Color,
     Mesh,
     OrthographicCamera,
@@ -9,8 +8,9 @@ import {
     ShaderMaterial,
     WebGLRenderer
 } from "three";
-import vertexShaderSource from "./shaders/triangle/vertex.glsl?raw";
-import fragmentShaderSource from "./shaders/triangle/fragment.glsl?raw";
+import { createBufferGeometry } from "./triangle/geometry.ts";
+import vertexShaderSource from "./triangle/shaders/vertex.glsl?raw";
+import fragmentShaderSource from "./triangle/shaders/fragment.glsl?raw";
 
 export class ThreeRenderer implements Renderer {
     engine!: WebGLRenderer;
@@ -43,17 +43,11 @@ export class ThreeRenderer implements Renderer {
             fragmentShader: fragmentShaderSource,
         });
 
-        const vertices = new Float32Array([
-            0.0,  0.5,  0.0,  // top center
-            -0.5, -0.5,  0.0,  // bottom left
-            0.5, -0.5,  0.0   // bottom right
-        ]);
-
-        const geometry = new BufferGeometry();
-        geometry.setAttribute('position', new BufferAttribute(vertices, 3));
+        const geometry= createBufferGeometry();
 
         const plane = new Mesh(geometry, shaderMaterial);
-        plane.position.set(0.5, 0.5, 0);
+        plane.position.set(0, 0, 0);
+
         this.scene.add(plane);
     }
 
