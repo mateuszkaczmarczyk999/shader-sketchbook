@@ -1,7 +1,7 @@
-import { WebGPURenderer } from "./WebGPU/renderer.ts";
-// import { ThreeRenderer } from "./WebGL/renderer.ts";
+// import { WebGPURenderer } from "./WebGPU/renderer.ts";
+import { ThreeRenderer } from "./WebGL/renderer.ts";
 
-const renderer = new WebGPURenderer();
+const renderer = new ThreeRenderer();
 
 renderer.initialize().then(() => {
     renderer.draw();

@@ -1,21 +1,21 @@
 import { Renderer } from "../types/rendering.ts";
 import { WebGLUtils } from "./utils.ts";
 import {
+    Camera,
     Color,
     Mesh,
-    OrthographicCamera,
     Scene,
     ShaderMaterial,
     WebGLRenderer
 } from "three";
-import { createBufferGeometry } from "./triangle/geometry.ts";
-import vertexShaderSource from "./triangle/shaders/vertex.glsl?raw";
-import fragmentShaderSource from "./triangle/shaders/fragment.glsl?raw";
+import { createBufferGeometry } from "./lighting-models/geometry.ts";
+import vertexShaderSource from "./lighting-models/shaders/vertex.glsl?raw";
+import fragmentShaderSource from "./lighting-models/shaders/fragment.glsl?raw";
 
 export class ThreeRenderer implements Renderer {
     engine!: WebGLRenderer;
     scene!: Scene;
-    camera!: OrthographicCamera;
+    camera!: Camera;
 
     initialize = async () => {
         this.engine = new WebGLRenderer({
@@ -28,22 +28,23 @@ export class ThreeRenderer implements Renderer {
 
         this.scene = new Scene();
 
-        this.camera = new OrthographicCamera(0, 1, 1, 0, 0.1, 1000);
-        this.camera.position.set(0, 0, 1);
+        this.camera = WebGLUtils.getCamera('perspective');
+
+        this.scene.background = WebGLUtils.getEnvironmentTexture();
 
         this.prepareModel();
     }
 
-    prepareModel = () => {
+    prepareModel = async () => {
         const shaderMaterial = new ShaderMaterial({
             uniforms: {
-                resolution: { value: WebGLUtils.getCanvasSize() }
+                specMap: { value: this.scene.background }
             },
             vertexShader: vertexShaderSource,
             fragmentShader: fragmentShaderSource,
         });
 
-        const geometry= createBufferGeometry();
+        const geometry = createBufferGeometry();
 
         const plane = new Mesh(geometry, shaderMaterial);
         plane.position.set(0, 0, 0);
@@ -52,6 +53,8 @@ export class ThreeRenderer implements Renderer {
     }
 
     draw = () => {
-        this.engine.render(this.scene, this.camera);
+        setTimeout(() => {
+            this.engine.render(this.scene, this.camera);
+        }, 1000);
     }
 }
