@@ -1,16 +1,19 @@
 import { Renderer } from "../types/rendering.ts";
 import { WebGPUUtils } from "./utils.ts";
-import vertexShaderSource from "./triangle/shaders/vertex.wgsl?raw";
-import fragmentShaderSource from "./triangle/shaders/fragment.wgsl?raw";
-import { Triangle } from "./triangle/geometry.ts";
-import {mat4, ReadonlyVec3} from 'gl-matrix';
+// import vertexShaderSource from "./triangle/shaders/vertex.wgsl?raw";
+// import fragmentShaderSource from "./triangle/shaders/fragment.wgsl?raw";
+// import { Triangle } from "./triangle/geometry.ts";
+import vertexShaderSource from "./lighting-models/shaders/vertex.wgsl?raw";
+import fragmentShaderSource from "./lighting-models/shaders/fragment.wgsl?raw";
+import { Sphere } from "./lighting-models/geometry.ts";
+import { mat4, ReadonlyVec3 } from 'gl-matrix';
 
 export class WebGPURenderer implements Renderer {
     private context!: GPUCanvasContext;
     private device!: GPUDevice;
     private pipeline!: GPURenderPipeline;
 
-    private _triangle!: Triangle;
+    private _triangle!: Sphere;
     private _viewParametersBindGroup!: GPUBindGroup;
 
     initialize = async () => {
@@ -40,30 +43,9 @@ export class WebGPURenderer implements Renderer {
     }
 
     prepareModel = () => {
-        this._triangle = new Triangle(this.device);
+        this._triangle = new Sphere(this.device);
 
-        const positionAttribDesc: GPUVertexAttribute = {
-            shaderLocation: 0, // @location(0)
-            offset: 0,
-            format: 'float32x3'
-        };
-        const colorAttribDesc: GPUVertexAttribute = {
-            shaderLocation: 1, // @location(1)
-            offset: 0,
-            format: 'float32x3'
-        };
-
-        const positionBufferDesc: GPUVertexBufferLayout = {
-            attributes: [positionAttribDesc],
-            arrayStride: 4 * 3, // sizeof(float) * 3
-            stepMode: 'vertex'
-        };
-        const colorBufferDesc: GPUVertexBufferLayout = {
-            attributes: [colorAttribDesc],
-            arrayStride: 4 * 3, // sizeof(float) * 3
-            stepMode: 'vertex'
-        };
-
+        // shader setup
         const vertexShaderModule = this.device.createShaderModule({
             code: vertexShaderSource
         });
@@ -71,7 +53,7 @@ export class WebGPURenderer implements Renderer {
         const vertexState: GPUVertexState = {
             module: vertexShaderModule,
             entryPoint: "vertexMain",
-            buffers: [ positionBufferDesc, colorBufferDesc ]
+            buffers: this._triangle.getVertexBufferLayouts()
         };
 
         const fragmentShaderModule = this.device.createShaderModule({
@@ -84,7 +66,7 @@ export class WebGPURenderer implements Renderer {
             targets: [ { format: WebGPUUtils.getPreferredCanvasFormat() } ]
         };
 
-        // bind group layout
+        // bind group layout for camera
         const viewUniformBindGroupLayout: GPUBindGroupLayoutEntry = {
             binding: 0,
             visibility: GPUShaderStage.VERTEX,
@@ -97,8 +79,14 @@ export class WebGPURenderer implements Renderer {
             buffer: { type: 'uniform' }
         };
 
+        const modelMatrixUniformBindGroupLayout: GPUBindGroupLayoutEntry = {
+            binding: 2,
+            visibility: GPUShaderStage.VERTEX,
+            buffer: { type: 'uniform' }
+        };
+
         const bindGroupLayout: GPUBindGroupLayout = this.device.createBindGroupLayout({
-            entries: [ viewUniformBindGroupLayout, projectionUniformBindGroupLayout ]
+            entries: [ viewUniformBindGroupLayout, projectionUniformBindGroupLayout, modelMatrixUniformBindGroupLayout ]
         });
 
         const pipelineLayoutDesc: GPUPipelineLayoutDescriptor = {
@@ -117,6 +105,11 @@ export class WebGPURenderer implements Renderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
+        const modelMatrixUniformBuffer: GPUBuffer = this.device.createBuffer({
+            size: 4 * 16, // sizeof(float) * 16
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
         const viewParametersBindGroupEntry: GPUBindGroupEntry = {
             binding: 0,
             resource: { buffer: viewParametersUniformBuffer }
@@ -127,24 +120,36 @@ export class WebGPURenderer implements Renderer {
             resource: { buffer: projectionParametersUniformBuffer }
         };
 
+        const modelMatrixBindGroupEntry: GPUBindGroupEntry = {
+            binding: 2,
+            resource: { buffer: modelMatrixUniformBuffer }
+        };
+
         this._viewParametersBindGroup = this.device.createBindGroup({
             layout: bindGroupLayout,
             entries: [
                 viewParametersBindGroupEntry,
-                projectionParametersBindGroupEntry
+                projectionParametersBindGroupEntry,
+                modelMatrixBindGroupEntry
             ]
         });
 
         // camera setup
-        const viewMatrix = this.prepareCameraView([1, 1, 5], [0, 0, 0], [0, 1, 0]);
+        const viewMatrix = this.prepareCameraView([0, 0, 4], [0, 0, 0], [0, 1, 0]);
         const viewMatrixFlatten = new Float32Array(16);
         viewMatrixFlatten.set(viewMatrix);
         this.device.queue.writeBuffer(viewParametersUniformBuffer, /*bufferOffset=*/0, viewMatrixFlatten);
 
-        const projectionMatrix = this.prepareCameraProjection(Math.PI / 4, 1, 0.1, 1000);
+        const projectionMatrix = this.prepareCameraProjection(Math.PI / 3, 1, 0.1, 1000);
         const projectionMatrixFlatten = new Float32Array(16);
         projectionMatrixFlatten.set(projectionMatrix);
         this.device.queue.writeBuffer(projectionParametersUniformBuffer, /*bufferOffset=*/0, projectionMatrixFlatten);
+
+        // model setup
+        const modelMatrix = this._triangle.getModelMatrix();
+        const modelMatrixFlatten = new Float32Array(16);
+        modelMatrixFlatten.set(modelMatrix);
+        this.device.queue.writeBuffer(modelMatrixUniformBuffer, /*bufferOffset=*/0, modelMatrixFlatten);
 
         // pipeline
         this.pipeline = this.device.createRenderPipeline({
@@ -174,10 +179,13 @@ export class WebGPURenderer implements Renderer {
 
         passEncoder.setPipeline(this.pipeline);
         passEncoder.setBindGroup(0, this._viewParametersBindGroup);
+
         passEncoder.setVertexBuffer(0, this._triangle.getVertexBuffer());
-        passEncoder.setVertexBuffer(1, this._triangle.getColorBuffer());
+        passEncoder.setVertexBuffer(1, this._triangle.getNormalBuffer());
+        passEncoder.setVertexBuffer(2, this._triangle.getUVBuffer());
         passEncoder.setIndexBuffer(this._triangle.getIndexBuffer(), 'uint16');
-        passEncoder.drawIndexed(3);
+
+        passEncoder.drawIndexed(this._triangle.getIndexCount());
 
         passEncoder.end();
 

@@ -28,8 +28,36 @@ export class Triangle {
     }
 
     public getVertexBuffer = () => this.positionBuffer;
+    private getVertexBufferLayout = (): GPUVertexBufferLayout => {
+        return {
+            attributes: [{
+                shaderLocation: 0, // @location(0)
+                offset: 0,
+                format: 'float32x3'
+            }],
+            arrayStride: 4 * 3, // sizeof(float) * 3
+            stepMode: 'vertex'
+        }
+    }
     public getColorBuffer = () => this.colorBuffer;
+
+    private getColorBufferLayout = (): GPUVertexBufferLayout => {
+        return {
+            attributes: [{
+                shaderLocation: 1, // @location(1)
+                offset: 0,
+                format: 'float32x3'
+            }],
+            arrayStride: 4 * 3, // sizeof(float) * 3
+            stepMode: 'vertex'
+        }
+    }
     public getIndexBuffer = () => this.indexBuffer;
+
+    public getVertexBufferLayouts = (): GPUVertexBufferLayout[] => [
+        this.getVertexBufferLayout(),
+        this.getColorBufferLayout()
+    ]
 
     private createBuffer = (arr: Float32Array | Uint16Array, usage: number) => {
         const descriptor: GPUBufferDescriptor = {
