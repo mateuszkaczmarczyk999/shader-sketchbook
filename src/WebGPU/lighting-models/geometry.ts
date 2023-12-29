@@ -1,5 +1,5 @@
 import { SphereGeometry } from "three";
-import {mat4, quat, vec3} from "gl-matrix";
+import { mat4, quat, vec3 } from "gl-matrix";
 
 export class Sphere {
     private device!: GPUDevice;
@@ -10,7 +10,7 @@ export class Sphere {
     private readonly indexBuffer!: GPUBuffer;
     private readonly indexCount: number;
 
-    public position = vec3.fromValues(0.0, 0.0, 5.0);
+    public position = vec3.fromValues(0.0, 0.0, 0.0);
     public rotation = quat.create();
     public scale = vec3.fromValues(1.0, 1.0, 1.0);
 
@@ -62,9 +62,9 @@ export class Sphere {
             attributes: [{
                 shaderLocation: 2, // @location(2)
                 offset: 0,
-                format: 'float32x3'
+                format: 'float32x2'
             }],
-            arrayStride: 4 * 3, // sizeof(float) * 3
+            arrayStride: 4 * 2, // sizeof(float) * 2
             stepMode: 'vertex'
         }
     }
@@ -78,9 +78,9 @@ export class Sphere {
 
     public getModelMatrix = () => {
         const modelMatrix = mat4.create();
-        mat4.translate(modelMatrix, modelMatrix, this.position);
-        mat4.fromQuat(modelMatrix, this.rotation);
-        mat4.scale(modelMatrix, modelMatrix, this.scale);
+        // mat4.translate(modelMatrix, modelMatrix, this.position);
+        // mat4.rotate(modelMatrix, modelMatrix, this.rotation);
+        // mat4.scale(modelMatrix, modelMatrix, this.scale);
         return modelMatrix;
     };
 

@@ -7,6 +7,5 @@ struct VertexOut {
 @fragment
 fn fragmentMain(fragData: VertexOut) -> @location(0) vec4f {
     var normal = normalize(fragData.vNormal);
-//    return vec4(normal, 1.0);
-    return vec4(1.0, 0.0, 0.0, 1.0);
+    return vec4(normal, 1.0);
 }

@@ -135,7 +135,7 @@ export class WebGPURenderer implements Renderer {
         });
 
         // camera setup
-        const viewMatrix = this.prepareCameraView([0, 0, 4], [0, 0, 0], [0, 1, 0]);
+        const viewMatrix = this.prepareCameraView([2, 0, 4], [0, 0, 0], [0, 1, 0]);
         const viewMatrixFlatten = new Float32Array(16);
         viewMatrixFlatten.set(viewMatrix);
         this.device.queue.writeBuffer(viewParametersUniformBuffer, /*bufferOffset=*/0, viewMatrixFlatten);
@@ -151,17 +151,45 @@ export class WebGPURenderer implements Renderer {
         modelMatrixFlatten.set(modelMatrix);
         this.device.queue.writeBuffer(modelMatrixUniformBuffer, /*bufferOffset=*/0, modelMatrixFlatten);
 
+
+        const depthStencil: GPUDepthStencilState = {
+            depthWriteEnabled: true,
+            depthCompare: 'less',
+            format: 'depth24plus-stencil8'
+        };
+
         // pipeline
         this.pipeline = this.device.createRenderPipeline({
             vertex: vertexState,
             fragment: fragmentState,
             primitive: { topology: "triangle-list" },
             layout,
+            depthStencil
         });
     }
 
 
     draw = () => {
+        const depthTextureDesc: GPUTextureDescriptor = {
+            size: [ 800, 800, 1 ],
+            dimension: '2d',
+            format: 'depth24plus-stencil8',
+            usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+        };
+
+        const depthTexture = this.device.createTexture(depthTextureDesc);
+        const depthTextureView = depthTexture.createView();
+
+        const depthAttachment: GPURenderPassDepthStencilAttachment = {
+            view: depthTextureView,
+            depthClearValue: 1,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store',
+            stencilClearValue: 0,
+            stencilLoadOp: 'clear',
+            stencilStoreOp: 'store'
+        };
+
         const commandEncoder = this.device.createCommandEncoder();
 
         const renderPassDescriptor: GPURenderPassDescriptor = {
@@ -172,7 +200,8 @@ export class WebGPURenderer implements Renderer {
                     storeOp: "store",
                     view: this.context.getCurrentTexture().createView()
                 }
-            ]
+            ],
+            depthStencilAttachment: depthAttachment,
         };
 
         const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);

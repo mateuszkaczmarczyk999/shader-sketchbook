@@ -1,7 +1,7 @@
 struct VertexInput {
     @location(0) pos: vec3f,
     @location(1) normal: vec3f,
-    @location(2) uv: vec3f,
+    @location(2) uv: vec2f,
     @builtin(instance_index) instance: u32,
 };
 
