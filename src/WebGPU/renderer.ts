@@ -85,8 +85,19 @@ export class WebGPURenderer implements Renderer {
             buffer: { type: 'uniform' }
         };
 
+        const camPositionUniformBindGroupLayout: GPUBindGroupLayoutEntry = {
+            binding: 3,
+            visibility: GPUShaderStage.FRAGMENT,
+            buffer: { type: 'uniform' }
+        }
+
         const bindGroupLayout: GPUBindGroupLayout = this.device.createBindGroupLayout({
-            entries: [ viewUniformBindGroupLayout, projectionUniformBindGroupLayout, modelMatrixUniformBindGroupLayout ]
+            entries: [
+                viewUniformBindGroupLayout,
+                projectionUniformBindGroupLayout,
+                modelMatrixUniformBindGroupLayout,
+                camPositionUniformBindGroupLayout
+            ]
         });
 
         const pipelineLayoutDesc: GPUPipelineLayoutDescriptor = {
@@ -110,6 +121,11 @@ export class WebGPURenderer implements Renderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
 
+        const camPositionUniformBuffer: GPUBuffer = this.device.createBuffer({
+            size: 4 * 3, // sizeof(float) * 16
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+
         const viewParametersBindGroupEntry: GPUBindGroupEntry = {
             binding: 0,
             resource: { buffer: viewParametersUniformBuffer }
@@ -125,17 +141,28 @@ export class WebGPURenderer implements Renderer {
             resource: { buffer: modelMatrixUniformBuffer }
         };
 
+        const camPositionBindGroupEntry: GPUBindGroupEntry = {
+            binding: 3,
+            resource: { buffer: camPositionUniformBuffer }
+        };
+
         this._viewParametersBindGroup = this.device.createBindGroup({
             layout: bindGroupLayout,
             entries: [
                 viewParametersBindGroupEntry,
                 projectionParametersBindGroupEntry,
-                modelMatrixBindGroupEntry
+                modelMatrixBindGroupEntry,
+                camPositionBindGroupEntry
             ]
         });
 
         // camera setup
-        const viewMatrix = this.prepareCameraView([2, 0, 4], [0, 0, 0], [0, 1, 0]);
+        const cameraPosition = [2, 0, 4] as ReadonlyVec3;
+        const camPositionFlatten = new Float32Array(3);
+        camPositionFlatten.set(cameraPosition);
+        this.device.queue.writeBuffer(camPositionUniformBuffer, /*bufferOffset=*/0, camPositionFlatten);
+
+        const viewMatrix = this.prepareCameraView(cameraPosition, [0, 0, 0], [0, 1, 0]);
         const viewMatrixFlatten = new Float32Array(16);
         viewMatrixFlatten.set(viewMatrix);
         this.device.queue.writeBuffer(viewParametersUniformBuffer, /*bufferOffset=*/0, viewMatrixFlatten);
@@ -167,7 +194,6 @@ export class WebGPURenderer implements Renderer {
             depthStencil
         });
     }
-
 
     draw = () => {
         const depthTextureDesc: GPUTextureDescriptor = {
