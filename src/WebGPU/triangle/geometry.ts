@@ -1,25 +1,3 @@
-//
-// let vertexBuffer = null
-//
-// export const createBufferGeometry = (device: GPUDevice) => {
-//     const vertices = new Float32Array([
-//          0.0,  0.5,
-//         -0.5, -0.5,
-//          0.5, -0.5,
-//     ]);
-//
-//     vertexBuffer = device.createBuffer({
-//         label: "Triangle vertices",
-//         size: vertices.byteLength,
-//         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-//     });
-//
-//     return { vertices, vertexBuffer }
-// }
-//
-// export const getVertexBuffer = () => vertexBuffer!
-
-
 const positions = new Float32Array([
      1.0, -1.0,  0.0,
     -1.0, -1.0,  0.0,
