@@ -5,16 +5,28 @@ import { WebGPUUtils } from "./utils.ts";
 // import { Triangle } from "./triangle/geometry.ts";
 import vertexShaderSource from "./lighting-models/shaders/vertex.wgsl?raw";
 import fragmentShaderSource from "./lighting-models/shaders/fragment.wgsl?raw";
+import skyBoxShaderSource from "./lighting-models/shaders/skybox.wgsl?raw";
+
 import { Sphere } from "./lighting-models/geometry.ts";
-import { mat4, ReadonlyVec3 } from 'gl-matrix';
+import {mat4, ReadonlyVec3} from 'gl-matrix';
+import {
+    createVerticesBuffer,
+    cubePositionOffset,
+    cubeUVOffset,
+    cubeVertexCount,
+    cubeVertexSize,
+    getSkyBoxVerticesBuffer
+} from "./lighting-models/skybox.ts";
 
 export class WebGPURenderer implements Renderer {
     private context!: GPUCanvasContext;
     private device!: GPUDevice;
     private pipeline!: GPURenderPipeline;
+    private skyBoxPipeline!: GPURenderPipeline;
 
     private _triangle!: Sphere;
     private _viewParametersBindGroup!: GPUBindGroup;
+    private _skyboxBindGroup!: GPUBindGroup;
 
     initialize = async () => {
         this.context = WebGPUUtils.getCanvasContext();
@@ -27,6 +39,7 @@ export class WebGPURenderer implements Renderer {
             usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
         });
 
+        await this.prepareCubeEnvironment();
         this.prepareModel();
     }
 
@@ -40,6 +53,129 @@ export class WebGPURenderer implements Renderer {
         const viewMatrix = mat4.create();
         mat4.lookAt(viewMatrix, eye, center, up);
         return viewMatrix;
+    }
+
+    prepareCubeEnvironment = async () => {
+        const cubeTextureImg = await WebGPUUtils.getEnvironmentTexture();
+        const imageSize = 2048;
+
+        const cubeTexture = this.device.createTexture({
+            size: {
+                width: imageSize,
+                height: imageSize,
+                depthOrArrayLayers: 6 // 6 faces
+            },
+            format: 'rgba8unorm', // Adjust as needed
+            usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+            dimension: '2d',
+            mipLevelCount: 1,
+            sampleCount: 1,
+        });
+
+        for (let i = 0; i < 6; i++) {
+            this.device.queue.writeTexture(
+                { texture: cubeTexture, origin: { x: 0, y: 0, z: i } }, // z indicates the face
+                WebGPUUtils.getImageData(cubeTextureImg.images[i]), // ArrayBuffer of image data
+                {
+                    bytesPerRow: 4 * imageSize,
+                    rowsPerImage: imageSize,
+                },
+                { width: imageSize, height: imageSize, depthOrArrayLayers: 1 }
+            );
+        }
+
+        createVerticesBuffer(this.device);
+
+        const uniformBufferSize = 4 * 16; // 4x4 matrix
+        const uniformBuffer = this.device.createBuffer({
+            size: uniformBufferSize,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+
+        const sampler = this.device.createSampler({
+            magFilter: 'linear',
+            minFilter: 'linear',
+        });
+
+        const modelViewProjectionMatrix = mat4.create() as Float32Array;
+
+        this.device.queue.writeBuffer(
+            uniformBuffer,
+            0,
+            modelViewProjectionMatrix.buffer,
+            modelViewProjectionMatrix.byteOffset,
+            modelViewProjectionMatrix.byteLength
+        );
+
+
+        // pipeline
+        this.skyBoxPipeline = this.device.createRenderPipeline({
+            vertex: {
+                module: this.device.createShaderModule({
+                    code: skyBoxShaderSource,
+                }),
+                entryPoint: 'vertexMain',
+                buffers: [
+                    {
+                        arrayStride: cubeVertexSize,
+                        attributes: [
+                            {
+                                // position
+                                shaderLocation: 0,
+                                offset: cubePositionOffset,
+                                format: 'float32x4',
+                            },
+                            {
+                                // uv
+                                shaderLocation: 1,
+                                offset: cubeUVOffset,
+                                format: 'float32x2',
+                            },
+                        ],
+                    },
+                ],
+            },
+            fragment: {
+                module: this.device.createShaderModule({
+                    code: skyBoxShaderSource,
+                }),
+                entryPoint: 'fragmentMain',
+                targets: [
+                    { format: WebGPUUtils.getPreferredCanvasFormat() },
+                ],
+            },
+            primitive: { topology: "triangle-list" },
+            layout: 'auto',
+            depthStencil: {
+                depthWriteEnabled: false,
+                depthCompare: 'less-equal',
+                format: 'depth24plus-stencil8', // Ensure this matches your depth texture format
+            },
+        });
+
+        this._skyboxBindGroup = this.device.createBindGroup({
+            layout: this.skyBoxPipeline.getBindGroupLayout(0),
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: uniformBuffer,
+                        offset: 0,
+                        size: uniformBufferSize,
+                    },
+                },
+                {
+                    binding: 1,
+                    resource: sampler,
+                },
+                {
+                    binding: 2,
+                    resource: cubeTexture.createView({
+                        dimension: 'cube',
+                    }),
+                },
+            ],
+        });
     }
 
     prepareModel = () => {
@@ -231,6 +367,16 @@ export class WebGPURenderer implements Renderer {
         };
 
         const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+
+
+        // Render Skybox
+        passEncoder.setPipeline(this.skyBoxPipeline);
+        passEncoder.setBindGroup(0, this._skyboxBindGroup);
+        passEncoder.setVertexBuffer(0, getSkyBoxVerticesBuffer());
+        // passEncoder.setIndexBuffer(this._triangle.getIndexBuffer(), 'uint16');
+
+        passEncoder.draw(cubeVertexCount, 1);
+
 
         passEncoder.setPipeline(this.pipeline);
         passEncoder.setBindGroup(0, this._viewParametersBindGroup);
