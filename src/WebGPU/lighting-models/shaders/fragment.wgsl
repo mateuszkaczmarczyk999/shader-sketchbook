@@ -5,6 +5,9 @@ struct VertexOut {
 }
 
 @group(0) @binding(3) var<uniform> cameraPosition: vec3f;
+@group(0) @binding(4) var specMap: texture_cube<f32>;
+@group(0) @binding(5) var mySampler: sampler;
+
 
 fn inverseLerp(v: f32, minValue: f32, maxValue: f32) -> f32 {
     return (v - minValue) / (maxValue - minValue);
@@ -47,6 +50,11 @@ fn fragmentMain(fragData: VertexOut) -> @location(0) vec4f {
     var phongValue = max(0.0, dot(viewDir, reflectDir));
     phongValue = pow(phongValue, 64.0);
     var specular = vec3(phongValue);
+
+    // IBL specular
+    var iblCoord = normalize(reflect(-viewDir, normal));
+    let iblSample = textureSampleLevel(specMap, mySampler, iblCoord, 8.0).rgb;
+    specular += iblSample * 0.5;
 
     // Frensel specular
     var frensel = 1.0 - max(0.0, dot(viewDir, normal));

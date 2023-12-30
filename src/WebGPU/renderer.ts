@@ -28,6 +28,9 @@ export class WebGPURenderer implements Renderer {
     private _viewParametersBindGroup!: GPUBindGroup;
     private _skyboxBindGroup!: GPUBindGroup;
 
+    private _cubeTexture!: GPUTexture;
+    private _smapler!: GPUSampler;
+
     initialize = async () => {
         this.context = WebGPUUtils.getCanvasContext();
         const adapter = await WebGPUUtils.getGPUAdapter();
@@ -59,7 +62,7 @@ export class WebGPURenderer implements Renderer {
         const cubeTextureImg = await WebGPUUtils.getEnvironmentTexture();
         const imageSize = 2048;
 
-        const cubeTexture = this.device.createTexture({
+        this._cubeTexture = this.device.createTexture({
             size: {
                 width: imageSize,
                 height: imageSize,
@@ -74,7 +77,7 @@ export class WebGPURenderer implements Renderer {
 
         for (let i = 0; i < 6; i++) {
             this.device.queue.writeTexture(
-                { texture: cubeTexture, origin: { x: 0, y: 0, z: i } }, // z indicates the face
+                { texture: this._cubeTexture, origin: { x: 0, y: 0, z: i } }, // z indicates the face
                 WebGPUUtils.getImageData(cubeTextureImg.images[i]), // ArrayBuffer of image data
                 {
                     bytesPerRow: 4 * imageSize,
@@ -92,7 +95,7 @@ export class WebGPURenderer implements Renderer {
             usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         });
 
-        const sampler = this.device.createSampler({
+        this._smapler = this.device.createSampler({
             magFilter: 'linear',
             minFilter: 'linear',
         });
@@ -166,11 +169,11 @@ export class WebGPURenderer implements Renderer {
                 },
                 {
                     binding: 1,
-                    resource: sampler,
+                    resource: this._smapler,
                 },
                 {
                     binding: 2,
-                    resource: cubeTexture.createView({
+                    resource: this._cubeTexture.createView({
                         dimension: 'cube',
                     }),
                 },
@@ -227,12 +230,31 @@ export class WebGPURenderer implements Renderer {
             buffer: { type: 'uniform' }
         }
 
+        const envTextureBindGroupLayout: GPUBindGroupLayoutEntry = {
+            binding: 4,
+            visibility: GPUShaderStage.FRAGMENT,
+            texture: {
+                sampleType: 'float',
+                viewDimension: 'cube'
+            }
+        };
+
+        const samplerBindGroupLayout: GPUBindGroupLayoutEntry = {
+            binding: 5,
+            visibility: GPUShaderStage.FRAGMENT,
+            sampler: {
+                type: 'filtering'
+            }
+        };
+
         const bindGroupLayout: GPUBindGroupLayout = this.device.createBindGroupLayout({
             entries: [
                 viewUniformBindGroupLayout,
                 projectionUniformBindGroupLayout,
                 modelMatrixUniformBindGroupLayout,
-                camPositionUniformBindGroupLayout
+                camPositionUniformBindGroupLayout,
+                envTextureBindGroupLayout,
+                samplerBindGroupLayout
             ]
         });
 
@@ -282,13 +304,27 @@ export class WebGPURenderer implements Renderer {
             resource: { buffer: camPositionUniformBuffer }
         };
 
+        const envTextureBindGroupEntry: GPUBindGroupEntry = {
+            binding: 4,
+            resource: this._cubeTexture.createView({
+                dimension: 'cube',
+            }),
+        };
+
+        const samplerBindGroupEntry: GPUBindGroupEntry = {
+            binding: 5,
+            resource: this._smapler,
+        };
+
         this._viewParametersBindGroup = this.device.createBindGroup({
             layout: bindGroupLayout,
             entries: [
                 viewParametersBindGroupEntry,
                 projectionParametersBindGroupEntry,
                 modelMatrixBindGroupEntry,
-                camPositionBindGroupEntry
+                camPositionBindGroupEntry,
+                envTextureBindGroupEntry,
+                samplerBindGroupEntry
             ]
         });
 
